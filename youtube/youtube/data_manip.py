@@ -403,6 +403,49 @@ class DataManip:
                     outfile.write(key + sep + value1 + sep + value2 + sep + str(delt) + '\n')     
     
     def countDifferent(self, path):
+        if path.endswith("pop.lst"):
+            path = path[:path.rfind('/')]
+            
+            ui = {}; vi = {}
+            file = open(path + "/block/user.map", 'r')
+            for line in file:
+                id, user = line.rstrip().split('\t')
+                ui[user] = id
+            file = open(path + '/block/video.map', 'r')
+            for line in file:
+                id, video = line.rstrip().split('\t')
+                vi[video] = id
+            
+
+            
+            file = open(path + "/train_80_20.dat", 'r')
+            pred = {}; s = set()
+            vmap = {}; done = {}
+            for line in file:
+                u, v, _ = line.rstrip().split('\t')
+                u = ui[u]; v = vi[v]
+                if u not in pred: pred[u] = []
+
+                if u not in done: done[u] = []
+                else: done[u].append(v)
+
+                if v not in vmap: vmap[v] = 1
+                else: vmap[v] = vmap[v] + 1
+
+            countlist = vmap.items()
+            countlist = sorted(countlist, key=lambda x: x[1], reverse = True)
+            for user in done:
+                cc = 0
+                for v, _ in countlist:
+                    if v not in done[user]:
+                        pred[user].append(v)
+                        cc += 1
+                        s.add(v)
+                    else: continue
+                    if cc == 50: break
+            
+            return (s,pred)
+            
         
         file = open(path, 'r')
         s = set()
@@ -418,6 +461,7 @@ class DataManip:
                     continue
                 s.add(lines[i])
                 pred[user].append(lines[i])
+                
 
         print "different predction: " + str(len(s))
         return (s,pred)
@@ -506,40 +550,84 @@ if __name__ == "__main__":
 #     dm.plot_convergence(dirpath,sep)
 
 
+    dirpath = dirpath + '/cache'
 
-    user_num = [100,500,1000]
+    ################################################## fix the user number , vary the cache number
+#     user_num = [100,500,1000]
+#     cache_num = 30
+#     bar_width = 0.2
+#     cache_each = 10.
+#     pred_set, pred_dict = dm.countDifferent(dirpath+"/clu_user.lst")
+#      
+#     xx = []; yy = []
+#     for index in range(3):
+#         x = []; y = []
+#         for num in range(1,cache_num+1):
+#             tmp_dict = {}
+#             for user in pred_dict:
+#                 tmp_dict[user] = pred_dict[user][0:num]
+#             cnt, broad_num = dm.getDone(dirpath, pred_set, tmp_dict, user_num[index])
+#             x.append(num); y.append((cnt-broad_num)/(cache_each*user_num[index]))
+#         xx.append(x); yy.append(y)
+
+
+    ################################################### fix the cache, vary the user number
+#     bar_width = 0.2 * 20
+#     cache_num = [5,15,25]
+#     user_num = 1000
+#     cache_each = 10.
+#     pred_set, pred_dict = dm.countDifferent(dirpath+"/clu_user.lst")
+#     xx = []; yy = []
+#     for index in range(3):
+#         x = []; y = []
+#         for num in range(80, user_num+1, 20):
+#             tmp_dict = {}
+#             for user in pred_dict:
+#                 tmp_dict[user] = pred_dict[user][0:cache_num[index]]
+#             cnt, broad_num = dm.getDone(dirpath, pred_set, tmp_dict, num)
+#             x.append(num); y.append((cnt-broad_num)/(cache_each*num))
+#         xx.append(x); yy.append(y)
+        
+    ################################################## vary the rec method for user
+
+    bar_width = 0.2 * 20
+    user_num = 1000
     cache_num = 25
     cache_each = 10.
-    pred_set, pred_dict = dm.countDifferent(dirpath+"/clu_user.lst")
-
+    paths = ["clu_user.lst", "sgd.lst", "pop.lst"]
     xx = []; yy = []
     for index in range(3):
+        pred_set, pred_dict = dm.countDifferent(dirpath + '/' + paths[index])
         x = []; y = []
-        for num in range(1,cache_num+1):
+        for num in range(40, user_num+1, 20): ####### user num
             tmp_dict = {}
             for user in pred_dict:
-                tmp_dict[user] = pred_dict[user][0:num]
-            cnt, broad_num = dm.getDone(dirpath, pred_set, tmp_dict, user_num[index])
-            x.append(num); y.append((cnt-broad_num)/(cache_each*user_num[index]))
+                tmp_dict[user] = pred_dict[user][0:cache_num]
+            cnt, broad_num = dm.getDone(dirpath, pred_set, tmp_dict, num)
+            x.append(num); y.append((cnt-broad_num)/(cache_each*num))
         xx.append(x); yy.append(y)
-
-#     cnt = dm.getDone(dirpath, pred_set, pred_dict)
-#     print cnt
-
+    
+    #################################################### start plot
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1,1,figsize=(40,9))
     ax.get_xaxis().tick_bottom()
     ax.get_yaxis().tick_left()
-    plt.xticks()
-    plt.yticks()
+    plt.xlabel("user number")
+    plt.ylabel("communication save(%)")
 #     ax = plt.subplot(111)
     colors = ['r','g','b']
     bars = []
-#     offset = [-0.2, 0, 0.2]
+    offset = [-bar_width, 0, bar_width]
     for index in range(3):
-        bar_each = ax.bar(xx[index], yy[index], width = 0.2, color = [colors[index]], label = str(user_num[index]))
+        xxx = [(x+offset[index]) for x in xx[index]]
+        if index == 1:
+            plt.xticks(xxx[::2], xxx[::2])
+        yyy = [each for each in yy[index]]
+        bar_each = ax.bar(xxx, yyy, width = bar_width, color = [colors[index]])
         bars.append(bar_each)
-#     ax.legend((bars[0], bars[1], bars[2]), (str(user_num[0]), str(user_num[1]), str(user_num[2])))
+#     ax.legend((bars[0], bars[1], bars[2]), ("user number: " + str(user_num[0]),"user number: " +  str(user_num[1]),"user number: " +  str(user_num[2])))
+#     ax.legend((bars[0], bars[1], bars[2]), ("cache number: " + str(cache_num[0]),"cache number: " +  str(cache_num[1]),"cache number: " +  str(cache_num[2])))
+    ax.legend((bars[0], bars[1], bars[2]), ("cluster based", "rank only", "pop based"))
 #     line_clu = plt.bar(x, y, lw=2.5, color = '#1f77b4', label = "curve")
     plt.show()
 
